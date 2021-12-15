@@ -16,11 +16,11 @@ use actix_web::{middleware, web, App, HttpRequest, HttpResponse, HttpServer, Res
 async fn index(map: web::Data<Mutex<HashMap<String, structs::Value>>>) -> impl Responder {
     let mut r = String::from("<a href=\"/help\">help</a>");
     r.push_str(r#"
-<form id="f" method="post">
+<div>
     key: <input id="k">
     value: <textarea  id="v"></textarea>
-    <span onclick=s()>submmit</span>
-</form>
+    <button onclick=s()>submmit</button>
+</div>
 <script>
 function s(){
     let k = (document.getElementById("k").value)
@@ -63,7 +63,7 @@ async fn help() -> impl Responder {
     <li> 获取k <br><code> curl [server]/[key]</code></li>
     <li> 可以获取的次数默认1 <br> 可选项  times int  </li>
     <li> 保存的分钟 默认1分钟 <br> 可选项 minutes int </li>
-    <li> 是否再首页列表显示 <br> 可选项 private 任意string </li>
+    <li> 是否在首页列表显示 <br> 可选项 private 任意string </li>
     <li> demo <br> curl -X POST -d "abcdefg" "localhost:7259/abc?times=2&private=a" </li>
 </ol>
         "#
@@ -77,8 +77,11 @@ async fn put(
     req: HttpRequest,
     value: String,
 ) -> impl Responder {
-    if key.len() > 20 {
+    if key.len() > 32 {
         return "key too long";
+    }
+    if value.len() == 0{
+        return "value is empty";
     }
     let mut locked_map = map.lock().unwrap();
     if locked_map.contains_key(&key) {
@@ -86,12 +89,17 @@ async fn put(
     }
     let create_time = tools::now_timestamps();
     let mut v = Value::new(&value, create_time);
-    let params = web::Query::<structs::Params>::from_query(req.query_string()).unwrap();
+    let params =  match web::Query::<structs::Params>::from_query(req.query_string()){
+        Ok(t) => t,
+        Err(e) => {
+            println!("bad request: {:?}",e);
+            return "bad request!";
+        }
+    };
     if let Some(t) = params.times {
         v.times = t;
     }
     let delete_time = if let Some(t) = params.minutes {
-        println!("minutes = {}",t);
         create_time + t * 60
     } else {
         create_time + 60
