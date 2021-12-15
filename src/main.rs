@@ -19,7 +19,7 @@ async fn index(map: web::Data<Mutex<HashMap<String, structs::Value>>>) -> impl R
 <div>
     key: <input id="k">
     value: <textarea  id="v"></textarea>
-    <button onclick=s()>submmit</button>
+    <button onclick=s()>submit</button>
 </div>
 <script>
 function s(){
@@ -143,6 +143,7 @@ async fn get(
 #[actix_web::main]
 async fn main() -> io::Result<()> {
     std::env::set_var("RUST_LOG", "actix_web=info");
+    env_logger::init();
     let map = web::Data::new(Mutex::new(HashMap::<String, structs::Value>::new()));
     let delete_queue =
         web::Data::new(Mutex::new(BinaryHeap::<structs::StructInDeleteQueue>::new()));
