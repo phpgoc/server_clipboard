@@ -1,5 +1,7 @@
 mod structs;
 mod tools;
+mod tcp_listener;
+
 
 #[macro_use]
 extern crate actix_web;
@@ -123,22 +125,22 @@ async fn get(
             .content_type("text/plain")
             .body("key too long");
     }
-    let r: HttpResponse;
     let mut times = -1;
     let mut locked_map = map.lock().unwrap();
+    let mut body = String::new();
     if let Some(v) = locked_map.get_mut(&key) {
         v.times -= 1;
         times = v.times;
-        r = HttpResponse::Ok()
-            .content_type("text/plain")
-            .body(format!("{}", &v.value))
-    } else {
-        r = HttpResponse::Ok().content_type("text/plain").body("")
+        body.push_str(&format!("<span id='t'>{}<span>",v.value));
+    }else{
+        body.push_str("<span id='t'><span>");
     }
     if 0 == times {
         locked_map.remove(&key);
     }
-    r
+    HttpResponse::Ok()
+        .content_type("text/html")
+        .body(body)
 }
 #[actix_web::main]
 async fn main() -> io::Result<()> {
@@ -148,6 +150,7 @@ async fn main() -> io::Result<()> {
     let delete_queue =
         web::Data::new(Mutex::new(BinaryHeap::<structs::StructInDeleteQueue>::new()));
     delete_expired_thread(delete_queue.clone(), map.clone());
+    tcp_listener::tcp_listener(map.clone());
     HttpServer::new(move || {
         App::new()
             .app_data(map.clone())
