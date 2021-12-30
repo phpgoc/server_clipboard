@@ -1,6 +1,7 @@
 mod structs;
 mod tcp_listener;
 mod tools;
+mod ws_mod;
 
 #[macro_use]
 extern crate actix_web;
@@ -14,6 +15,7 @@ use std::io;
 use std::sync::Mutex;
 use std::thread::{sleep, spawn};
 use std::time::Duration;
+use actix::Actor;
 
 #[get("/")]
 async fn index(map: web::Data<Mutex<HashMap<String, structs::Value>>>) -> impl Responder {
@@ -163,16 +165,25 @@ async fn main() -> io::Result<()> {
     let map = web::Data::new(Mutex::new(HashMap::<String, structs::Value>::new()));
     let delete_queue =
         web::Data::new(Mutex::new(BinaryHeap::<structs::StructInDeleteQueue>::new()));
+
+    let ws_server = ws_mod::WsServer::new().start();
+
     delete_expired_thread(delete_queue.clone(), map.clone());
     tcp_listener::tcp_listener(map.clone(), tcp_port);
     HttpServer::new(move || {
         App::new()
             .app_data(map.clone())
             .app_data(delete_queue.clone())
+            .data(ws_server.clone())
             .wrap(middleware::Logger::default())
             .service(index)
             .service(help)
             .service(put)
+            .service(web::resource("/html").route(web::get().to(|| {
+                HttpResponse::Ok().content_type("text/html").body( ws_mod::WS_HTML)
+            })))
+            .route("/count/", web::get().to(ws_mod::get_count))
+            .service(web::resource("/ws/").to(ws_mod::chat_route))
             .service(get)
     })
     .bind(format!("0.0.0.0:{}", http_port))?
