@@ -1,0 +1,14 @@
+name: 剪贴板服务
+version: "0.1.0"
+author: zxq. <phpgoc@icloud.com>
+args:
+  - http_port:
+      short: p
+      long: port
+      help: web端口
+      takes_value: true
+  - tcp_port:
+      short: t
+      long: tcp
+      help: tcp端口
+      takes_value: true

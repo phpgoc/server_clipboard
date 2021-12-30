@@ -1,5 +1,5 @@
-use std::cmp::Ordering;
 use serde_derive::Deserialize;
+use std::cmp::Ordering;
 
 pub(crate) struct Value {
     pub(crate) value: String,

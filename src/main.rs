@@ -1,23 +1,25 @@
 mod structs;
-mod tools;
 mod tcp_listener;
-
+mod tools;
 
 #[macro_use]
 extern crate actix_web;
+#[macro_use]
+extern crate clap;
+use crate::structs::Value;
+use actix_web::{middleware, web, App, HttpRequest, HttpResponse, HttpServer, Responder};
+
 use std::collections::{BinaryHeap, HashMap};
 use std::io;
 use std::sync::Mutex;
 use std::thread::{sleep, spawn};
 use std::time::Duration;
 
-use crate::structs::Value;
-use actix_web::{middleware, web, App, HttpRequest, HttpResponse, HttpServer, Responder};
-
 #[get("/")]
 async fn index(map: web::Data<Mutex<HashMap<String, structs::Value>>>) -> impl Responder {
     let mut r = String::from("<a href=\"/help\">help</a>");
-    r.push_str(r#"
+    r.push_str(
+        r#"
 <div>
     key: <input id="k">
     value: <textarea  id="v"></textarea>
@@ -28,7 +30,7 @@ function s(){
     let k = (document.getElementById("k").value)
     let v = (document.getElementById("v").value)
     var xhr = new XMLHttpRequest();
-    xhr.open("POST", "http://localhost:7259/"+k, true);
+    xhr.open("POST", "/"+k, true);
     xhr.onreadystatechange = function () {
         if (this.readyState != 4) return;
 
@@ -41,7 +43,8 @@ function s(){
     xhr.send(v)
 }
 </script>
-    "#);
+    "#,
+    );
     let locked_map = map.lock().unwrap();
     if locked_map.len() != 0 {
         r.push_str("<br>list:<ul>");
@@ -82,7 +85,7 @@ async fn put(
     if key.len() > 32 {
         return "key too long";
     }
-    if value.len() == 0{
+    if value.len() == 0 {
         return "value is empty";
     }
     let mut locked_map = map.lock().unwrap();
@@ -91,10 +94,10 @@ async fn put(
     }
     let create_time = tools::now_timestamps();
     let mut v = Value::new(&value, create_time);
-    let params =  match web::Query::<structs::Params>::from_query(req.query_string()){
+    let params = match web::Query::<structs::Params>::from_query(req.query_string()) {
         Ok(t) => t,
         Err(e) => {
-            println!("bad request: {:?}",e);
+            println!("bad request: {:?}", e);
             return "bad request!";
         }
     };
@@ -131,26 +134,37 @@ async fn get(
     if let Some(v) = locked_map.get_mut(&key) {
         v.times -= 1;
         times = v.times;
-        body.push_str(&format!("<span id='t'>{}<span>",v.value));
-    }else{
+        body.push_str(&format!("<span id='t'>{}<span>", v.value));
+    } else {
         body.push_str("<span id='t'><span>");
     }
     if 0 == times {
         locked_map.remove(&key);
     }
-    HttpResponse::Ok()
-        .content_type("text/html")
-        .body(body)
+    HttpResponse::Ok().content_type("text/html").body(body)
 }
 #[actix_web::main]
 async fn main() -> io::Result<()> {
     std::env::set_var("RUST_LOG", "actix_web=info");
     env_logger::init();
+
+    let yaml = load_yaml!("cli.yml");
+    let matches = clap::App::from_yaml(yaml).get_matches();
+    let http_port = matches
+        .value_of("http_port")
+        .unwrap_or("7259")
+        .parse::<i32>()
+        .unwrap_or(7259);
+    let tcp_port = matches
+        .value_of("tcp_port")
+        .unwrap_or("9527")
+        .parse::<i32>()
+        .unwrap_or(9527);
     let map = web::Data::new(Mutex::new(HashMap::<String, structs::Value>::new()));
     let delete_queue =
         web::Data::new(Mutex::new(BinaryHeap::<structs::StructInDeleteQueue>::new()));
     delete_expired_thread(delete_queue.clone(), map.clone());
-    tcp_listener::tcp_listener(map.clone());
+    tcp_listener::tcp_listener(map.clone(), tcp_port);
     HttpServer::new(move || {
         App::new()
             .app_data(map.clone())
@@ -161,7 +175,7 @@ async fn main() -> io::Result<()> {
             .service(put)
             .service(get)
     })
-    .bind("0.0.0.0:7259")?
+    .bind(format!("0.0.0.0:{}", http_port))?
     .run()
     .await
 }
@@ -196,13 +210,13 @@ fn delete_expired_thread(
                     cur = locked_queue.pop();
                     drop(locked_queue);
                 } else {
-                    sleep(Duration::from_secs(v.delete_time-now));
+                    sleep(Duration::from_secs(v.delete_time - now));
                 }
             } else {
                 let mut locked_queue = queue.lock().unwrap();
                 cur = locked_queue.pop();
                 drop(locked_queue);
-                if cur.is_none(){
+                if cur.is_none() {
                     sleep(Duration::from_secs(60));
                 }
             }
