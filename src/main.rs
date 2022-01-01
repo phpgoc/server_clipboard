@@ -2,6 +2,7 @@ mod structs;
 mod tcp_listener;
 mod tools;
 mod ws_mod;
+mod html;
 
 #[macro_use]
 extern crate actix_web;
@@ -19,33 +20,9 @@ use actix::Actor;
 
 #[get("/")]
 async fn index(map: web::Data<Mutex<HashMap<String, structs::Value>>>) -> impl Responder {
-    let mut r = String::from("<a href=\"/help\">help</a>");
+    let mut r = String::from("<a href=\"/HELP\">HELP</a>");
     r.push_str(
-        r#"
-<div>
-    key: <input id="k">
-    value: <textarea  id="v"></textarea>
-    <button onclick=s()>submit</button>
-</div>
-<script>
-function s(){
-    let k = (document.getElementById("k").value)
-    let v = (document.getElementById("v").value)
-    var xhr = new XMLHttpRequest();
-    xhr.open("POST", "/"+k, true);
-    xhr.onreadystatechange = function () {
-        if (this.readyState != 4) return;
-
-        if (this.status == 200) {
-            location.reload()
-        }else{
-            alert("err")
-        }
-    };
-    xhr.send(v)
-}
-</script>
-    "#,
+        html::INDEX,
     );
     let locked_map = map.lock().unwrap();
     if locked_map.len() != 0 {
@@ -59,22 +36,11 @@ function s(){
     }
     HttpResponse::Ok().content_type("text/html").body(r)
 }
-#[get("/help")]
+#[get("/HELP")]
 async fn help() -> impl Responder {
     HttpResponse::Ok()
         .content_type("text/html;charset=utf-8")
-        .body(format!(
-            r#"
-<ol>
-    <li> 存入k,v<br><code>curl -X POST -d "[value]" [server]/[key] </code></li>
-    <li> 获取k <br><code> curl [server]/[key]</code></li>
-    <li> 可以获取的次数默认1 <br> 可选项  times int  </li>
-    <li> 保存的分钟 默认1分钟 <br> 可选项 minutes int </li>
-    <li> 是否在首页列表显示 <br> 可选项 private 任意string </li>
-    <li> demo <br> curl -X POST -d "abcdefg" "localhost:7259/abc?times=2&private=a" </li>
-</ol>
-        "#
-        ))
+        .body(html::HELP)
 }
 #[post("/{key}")]
 async fn put(
@@ -180,9 +146,11 @@ async fn main() -> io::Result<()> {
             .service(help)
             .service(put)
             .service(web::resource("/html").route(web::get().to(|| {
-                HttpResponse::Ok().content_type("text/html").body( ws_mod::WS_HTML)
+                HttpResponse::Ok().content_type("text/html").body( html::WS_HTML)
             })))
-            .route("/count/", web::get().to(ws_mod::get_count))
+            .service(web::resource("/test").route(web::get().to(|| {
+                HttpResponse::Ok().content_type("text/html").body( html::GET)
+            })))
             .service(web::resource("/ws/").to(ws_mod::chat_route))
             .service(get)
     })

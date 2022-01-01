@@ -1,16 +1,11 @@
 use actix::prelude::*;
 use rand::{self, rngs::ThreadRng, Rng};
 
-use std::sync::{
-    atomic::{AtomicUsize, Ordering},
-    Arc,
-};
 
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
 
-use crate::structs;
-use actix_web::{web, Error, HttpRequest, HttpResponse, Responder};
+use actix_web::{web, Error, HttpRequest, HttpResponse};
 use actix_web_actors::ws;
 
 #[derive(Message)]
@@ -58,10 +53,9 @@ pub struct WsServer {
 }
 
 impl WsServer {
-    pub fn new(
-        // _map: web::Data<Mutex<HashMap<String, structs::Value>>>,
+    pub(crate) fn new(// _map: web::Data<Mutex<HashMap<String, structs::Value>>>,
     ) -> WsServer {
-        let mut rooms = HashMap::new();
+        let rooms = HashMap::new();
 
         WsServer {
             sessions: HashMap::new(),
@@ -69,7 +63,7 @@ impl WsServer {
             rng: rand::thread_rng(),
         }
     }
-    pub fn insert(&mut self, room : String){
+    pub(crate) fn insert(&mut self, room: String) {
         self.rooms.insert(room, Vec::new());
     }
 }
@@ -129,7 +123,6 @@ impl Handler<Disconnect> for WsServer {
     }
 }
 
-/// Handler for Message message.
 impl Handler<ClientMessage> for WsServer {
     type Result = ();
 
@@ -138,7 +131,6 @@ impl Handler<ClientMessage> for WsServer {
     }
 }
 
-/// Handler for `ListRooms` message.
 impl Handler<ListRooms> for WsServer {
     type Result = MessageResult<ListRooms>;
 
@@ -153,8 +145,6 @@ impl Handler<ListRooms> for WsServer {
     }
 }
 
-/// Join room, send disconnect message to old room
-/// send join message to new room
 impl Handler<Join> for WsServer {
     type Result = ();
 
@@ -195,17 +185,11 @@ pub(crate) async fn chat_route(
             hb: Instant::now(),
             room: "Main".to_owned(),
             name: None,
-            addr: srv.get_ref().clone(),
+            address: srv.get_ref().clone(),
         },
         &req,
         stream,
     )
-}
-
-///  Displays and affects state
-pub(crate) async fn get_count(count: web::Data<Arc<AtomicUsize>>) -> impl Responder {
-    let current_count = count.fetch_add(1, Ordering::SeqCst);
-    format!("Visitors: {}", current_count)
 }
 
 struct WsChatSession {
@@ -213,18 +197,16 @@ struct WsChatSession {
     hb: Instant,
     room: String,
     name: Option<String>,
-    addr: Addr<WsServer>,
+    address: Addr<WsServer>,
 }
 
 impl Actor for WsChatSession {
     type Context = ws::WebsocketContext<Self>;
 
     fn started(&mut self, ctx: &mut Self::Context) {
-        // we'll start heartbeat process on session start.
         self.hb(ctx);
-
         let addr = ctx.address();
-        self.addr
+        self.address
             .send(Connect {
                 addr: addr.recipient(),
             })
@@ -240,7 +222,7 @@ impl Actor for WsChatSession {
     }
 
     fn stopping(&mut self, _: &mut Self::Context) -> Running {
-        self.addr.do_send(Disconnect { id: self.id });
+        self.address.do_send(Disconnect { id: self.id });
         Running::Stop
     }
 }
@@ -252,7 +234,6 @@ impl Handler<Message> for WsChatSession {
     }
 }
 
-/// WebSocket message handler
 impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for WsChatSession {
     fn handle(&mut self, msg: Result<ws::Message, ws::ProtocolError>, ctx: &mut Self::Context) {
         let msg = match msg {
@@ -263,7 +244,6 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for WsChatSession {
             Ok(msg) => msg,
         };
 
-        println!("WEBSOCKET MESSAGE: {:?}", msg);
         match msg {
             ws::Message::Ping(msg) => {
                 self.hb = Instant::now();
@@ -278,33 +258,10 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for WsChatSession {
                 if m.starts_with('/') {
                     let v: Vec<&str> = m.splitn(2, ' ').collect();
                     match v[0] {
-                        "/list" => {
-                            // Send ListRooms message to chat server and wait for
-                            // response
-                            println!("List rooms");
-                            self.addr
-                                .send(ListRooms)
-                                .into_actor(self)
-                                .then(|res, _, ctx| {
-                                    match res {
-                                        Ok(rooms) => {
-                                            for room in rooms {
-                                                ctx.text(room);
-                                            }
-                                        }
-                                        _ => println!("Something is wrong"),
-                                    }
-                                    fut::ready(())
-                                })
-                                .wait(ctx)
-                            // .wait(ctx) pauses all events in context,
-                            // so actor wont receive any new messages until it get list
-                            // of rooms back
-                        }
                         "/join" => {
                             if v.len() == 2 {
                                 self.room = v[1].to_owned();
-                                self.addr.do_send(Join {
+                                self.address.do_send(Join {
                                     id: self.id,
                                     name: self.room.clone(),
                                 });
@@ -312,13 +269,6 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for WsChatSession {
                                 ctx.text("joined");
                             } else {
                                 ctx.text("!!! room name is required");
-                            }
-                        }
-                        "/name" => {
-                            if v.len() == 2 {
-                                self.name = Some(v[1].to_owned());
-                            } else {
-                                ctx.text("!!! name is required");
                             }
                         }
                         _ => ctx.text(format!("!!! unknown command: {:?}", m)),
@@ -330,7 +280,7 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for WsChatSession {
                         m.to_owned()
                     };
                     // send message to chat server
-                    self.addr.do_send(ClientMessage {
+                    self.address.do_send(ClientMessage {
                         id: self.id,
                         msg,
                         room: self.room.clone(),
@@ -351,106 +301,15 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for WsChatSession {
 }
 
 impl WsChatSession {
-    /// helper method that sends ping to client every second.
-    ///
-    /// also this method checks heartbeats from client
     fn hb(&self, ctx: &mut ws::WebsocketContext<Self>) {
         ctx.run_interval(HEARTBEAT_INTERVAL, |act, ctx| {
-            // check client heartbeats
             if Instant::now().duration_since(act.hb) > CLIENT_TIMEOUT {
-                // heartbeat timed out
                 println!("Websocket Client heartbeat failed, disconnecting!");
-                // notify chat server
-                act.addr.do_send(Disconnect { id: act.id });
-                // stop actor
+                act.address.do_send(Disconnect { id: act.id });
                 ctx.stop();
-                // don't try to send a ping
                 return;
             }
-
             ctx.ping(b"");
         });
     }
 }
-
-pub const WS_HTML: &str = r#"<!DOCTYPE html>
-<html>
-  <head>
-    <title>Chat!</title>
-    <meta charset="utf-8" />
-    <script>
-      'use strict'
-
-      window.onload = () => {
-        let conn = null
-
-        const log = (msg) => {
-          div_log.innerHTML += msg + '<br>'
-          div_log.scroll(0, div_log.scrollTop + 1000)
-        }
-    　const GetUrlRelativePath() =>
-    　　{
-    　　　　let url = document.location.toString();
-    　　　　let arrUrl = url.split("//");
-
-    　　　　let start = arrUrl[1].indexOf("/");
-    　　　　let relUrl = arrUrl[1].substring(start);//stop省略，截取从start开始到结尾的所有字符
-
-    　　　　if(relUrl.indexOf("?") != -1){
-    　　　　　　relUrl = relUrl.split("?")[0];
-    　　　　}
-    　　　　return relUrl;
-    　　}
-        const connect = () => {
-          const wsUri =
-           'ws://' +
-            window.location.host +
-            '/ws/'
-          conn = new WebSocket(wsUri)
-          log('Connecting...')
-          conn.onopen = function () {
-            log('Connected.')
-          }
-          conn.onmessage = function (e) {
-            log('Received: ' + e.data)
-          }
-          conn.onclose = function () {
-            log('Disconnected.')
-            conn = null
-            connect()
-          }
-        }
-        connect()
-
-        btn_send.onclick = () => {
-          if (!conn) return
-
-          const text = input_text.value
-          log('Sending: ' + text)
-          conn.send(text)
-
-          input_text.value = ''
-          input_text.focus()
-        }
-
-        input_text.onkeyup = (e) => {
-          if (e.key === 'Enter') {
-            btn_send.click()
-          }
-        }
-      }
-    </script>
-  </head>
-
-  <body>
-    <h3>Chat!</h3>
-    <div
-      id="div_log"
-      style="width: 20em; height: 15em; overflow: auto; border: 1px solid black"
-    ></div>
-
-    <input id="input_text" type="text" />
-    <input id="btn_send" type="button" value="Send" />
-  </body>
-</html>
-"#;
