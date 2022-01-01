@@ -1,10 +1,10 @@
 use actix::prelude::*;
 use rand::{self, rngs::ThreadRng, Rng};
 
-
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
 
+use crate::structs;
 use actix_web::{web, Error, HttpRequest, HttpResponse};
 use actix_web_actors::ws;
 
@@ -44,11 +44,13 @@ impl actix::Message for ListRooms {
 pub struct Join {
     pub id: usize,
     pub name: String,
+    pub(crate) times: i32,
+    pub(crate) minutes: u64,
 }
 
 pub struct WsServer {
     sessions: HashMap<usize, Recipient<Message>>,
-    rooms: HashMap<String, Vec<usize>>,
+    rooms: HashMap<String, (i32, u64, Vec<usize>)>,
     rng: ThreadRng,
 }
 
@@ -63,15 +65,11 @@ impl WsServer {
             rng: rand::thread_rng(),
         }
     }
-    pub(crate) fn insert(&mut self, room: String) {
-        self.rooms.insert(room, Vec::new());
-    }
 }
 
 impl WsServer {
-    /// Send message to all users in the room
     fn send_message(&self, room: &str, message: &str, skip_id: usize) {
-        if let Some(sessions) = self.rooms.get(room) {
+        if let Some((_,_,sessions)) = self.rooms.get(room) {
             for id in sessions {
                 if *id != skip_id {
                     if let Some(addr) = self.sessions.get(id) {
@@ -90,13 +88,8 @@ impl Handler<Connect> for WsServer {
     type Result = usize;
 
     fn handle(&mut self, msg: Connect, _: &mut Context<Self>) -> Self::Result {
-        self.send_message(&"Main".to_owned(), "Someone joined", 0);
         let id = self.rng.gen::<usize>();
         self.sessions.insert(id, msg.addr);
-        self.rooms
-            .entry("Main".to_owned())
-            .or_insert_with(Vec::new)
-            .push(id);
         id
     }
 }
@@ -105,20 +98,8 @@ impl Handler<Disconnect> for WsServer {
     type Result = ();
 
     fn handle(&mut self, msg: Disconnect, _: &mut Context<Self>) {
-        println!("Someone disconnected");
-        let mut rooms: Vec<String> = Vec::new();
-        // remove address
         if self.sessions.remove(&msg.id).is_some() {
-            // remove session from all rooms
-            for (name, sessions) in &mut self.rooms {
-                if sessions.contains(&msg.id) {
-                    rooms.push(name.to_owned());
-                }
-            }
-        }
-        // send message to other users
-        for room in rooms {
-            self.send_message(&room, "Someone disconnected", 0);
+            println!("3");
         }
     }
 }
@@ -131,44 +112,20 @@ impl Handler<ClientMessage> for WsServer {
     }
 }
 
-impl Handler<ListRooms> for WsServer {
-    type Result = MessageResult<ListRooms>;
-
-    fn handle(&mut self, _: ListRooms, _: &mut Context<Self>) -> Self::Result {
-        let mut rooms = Vec::new();
-
-        for key in self.rooms.keys() {
-            rooms.push(key.to_owned())
-        }
-
-        MessageResult(rooms)
-    }
-}
-
 impl Handler<Join> for WsServer {
     type Result = ();
 
     fn handle(&mut self, msg: Join, _: &mut Context<Self>) {
-        let Join { id, name } = msg;
-        let mut rooms = Vec::new();
-
-        // remove session from all rooms
-        for (n, sessions) in &mut self.rooms {
-            if sessions.contains(&id) {
-                rooms.push(n.to_owned());
-            }
-        }
-        // send message to other users
-        for room in rooms {
-            self.send_message(&room, "Someone disconnected", 0);
-        }
-
+        let Join {
+            id,
+            name,
+            times,
+            minutes,
+        } = msg;
         self.rooms
-            .entry(name.clone())
-            .or_insert_with(Vec::new)
-            .push(id);
-
-        self.send_message(&name, "Someone connected", id);
+            .entry(name)
+            .or_insert((times, minutes, Vec::new()))
+            .2.push(id);
     }
 }
 const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(5);
@@ -255,23 +212,33 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for WsChatSession {
             ws::Message::Text(text) => {
                 let m = text.trim();
                 // we check for /sss type of messages
-                if m.starts_with('/') {
-                    let v: Vec<&str> = m.splitn(2, ' ').collect();
-                    match v[0] {
-                        "/join" => {
-                            if v.len() == 2 {
-                                self.room = v[1].to_owned();
-                                self.address.do_send(Join {
-                                    id: self.id,
-                                    name: self.room.clone(),
-                                });
+                if m.starts_with("/join") {
+                    let v: Vec<&str> = m.splitn(3, ' ').collect();
 
-                                ctx.text("joined");
-                            } else {
-                                ctx.text("!!! room name is required");
+                    if v.len() >= 2 {
+                        self.room = v[1][1..].to_owned();
+                        let mut times = 1;
+                        let mut minutes = 1;
+                        if v.len() == 3 {
+                            if let Ok(params) =
+                                web::Query::<structs::Params>::from_query(&v[2][1..])
+                            {
+                                if let Some(t) = params.times {
+                                    times = t;
+                                }
+                                if let Some(t) = params.minutes {
+                                    minutes = t;
+                                }
                             }
                         }
-                        _ => ctx.text(format!("!!! unknown command: {:?}", m)),
+                        self.address.do_send(Join {
+                            id: self.id,
+                            name: self.room.clone(),
+                            times,
+                            minutes,
+                        });
+                    } else {
+                        ctx.text("!!! room name is required");
                     }
                 } else {
                     let msg = if let Some(ref name) = self.name {

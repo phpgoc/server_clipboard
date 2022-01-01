@@ -20,7 +20,7 @@ use actix::Actor;
 
 #[get("/")]
 async fn index(map: web::Data<Mutex<HashMap<String, structs::Value>>>) -> impl Responder {
-    let mut r = String::from("<a href=\"/HELP\">HELP</a>");
+    let mut r = String::from("<a href=\"/help\">help</a>");
     r.push_str(
         html::INDEX,
     );
@@ -36,7 +36,7 @@ async fn index(map: web::Data<Mutex<HashMap<String, structs::Value>>>) -> impl R
     }
     HttpResponse::Ok().content_type("text/html").body(r)
 }
-#[get("/HELP")]
+#[get("/help")]
 async fn help() -> impl Responder {
     HttpResponse::Ok()
         .content_type("text/html;charset=utf-8")
@@ -72,7 +72,8 @@ async fn put(
     if let Some(t) = params.times {
         v.times = t;
     }
-    let delete_time = if let Some(t) = params.minutes {
+    let delete_time = if let Some(mut t) = params.minutes {
+        t = t.min(60*24*7);
         create_time + t * 60
     } else {
         create_time + 60

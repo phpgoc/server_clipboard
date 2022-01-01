@@ -45,6 +45,7 @@ pub(crate) const GET: &str = r#"<!DOCTYPE html>
 
       const pathname = window.location.pathname
       const queryString = window.location.search
+      const joinString = "/join " + pathname + " " + queryString
       window.onload = () => {
         let conn = null
         const do_send_receive =  () => {
@@ -72,8 +73,8 @@ pub(crate) const GET: &str = r#"<!DOCTYPE html>
           conn = new WebSocket(wsUri)
           console.log('Connecting...')
           conn.onopen = function () {
-            console.log('Connected.')
-            conn.send("/join " + pathname + queryString )
+            console.log(joinString)
+            conn.send(joinString)
           }
           conn.onmessage = function (e) {
             console.log('Received: ' + e.data)
