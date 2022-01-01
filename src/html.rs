@@ -32,6 +32,7 @@ pub(crate) const HELP: &str = r#"
     <li> 保存的分钟 默认1分钟 <br> 可选项 minutes int </li>
     <li> 是否在首页列表显示 <br> 可选项 private 任意string </li>
     <li> demo <br> curl -X POST -d "abcdefg" "localhost:7259/abc?times=2&private=a" </li>
+    <li> get页面支持websocket,鼠标单击就会write 或 read 剪贴板 </li>
 </ol>
 "#;
 
