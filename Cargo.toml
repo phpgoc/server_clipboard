@@ -4,7 +4,8 @@ version = "0.1.0"
 edition = "2021"
 authors = ["zxq <phpgoc@icloud.com>"]
 license = "MIT OR Apache-2.0"
-
+description = "server_clipboard"
+repository= "https://github.com/phpgoc/server_clipboard"
 
 [dependencies]
 actix-web = "3"
