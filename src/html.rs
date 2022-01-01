@@ -83,7 +83,7 @@ pub(crate) const GET: &str = r#"<!DOCTYPE html>
           conn.onclose = function () {
             console.log('Disconnected.')
             conn = null
-            connect()
+            setTimeout( ()=> connect(), 5000)
           }
         }
         connect()
@@ -105,72 +105,3 @@ pub(crate) const GET: &str = r#"<!DOCTYPE html>
 </html>
 "#;
 
-pub const WS_HTML: &str = r#"<!DOCTYPE html>
-<html>
-  <head>
-    <title>Chat!</title>
-    <meta charset="utf-8" />
-    <script>
-      'use strict'
-
-      window.onload = () => {
-        let conn = null
-
-        const log = (msg) => {
-          div_log.innerHTML += msg + '<br>'
-          div_log.scroll(0, div_log.scrollTop + 1000)
-        }
-    　
-        const connect = () => {
-          const wsUri =
-           'ws://' +
-            window.location.host +
-            '/ws/'
-          conn = new WebSocket(wsUri)
-          log('Connecting...')
-          conn.onopen = function () {
-            log('Connected.')
-          }
-          conn.onmessage = function (e) {
-            log('Received: ' + e.data)
-          }
-          conn.onclose = function () {
-            log('Disconnected.')
-            conn = null
-            connect()
-          }
-        }
-        connect()
-
-        btn_send.onclick = () => {
-          if (!conn) return
-
-          const text = input_text.value
-          log('Sending: ' + text)
-          conn.send(text)
-
-          input_text.value = ''
-          input_text.focus()
-        }
-
-        input_text.onkeyup = (e) => {
-          if (e.key === 'Enter') {
-            btn_send.click()
-          }
-        }
-      }
-    </script>
-  </head>
-
-  <body>
-    <h3>Chat!</h3>
-    <div
-      id="div_log"
-      style="width: 20em; height: 15em; overflow: auto; border: 1px solid black"
-    ></div>
-
-    <input id="input_text" type="text" />
-    <input id="btn_send" type="button" value="Send" />
-  </body>
-</html>
-"#;

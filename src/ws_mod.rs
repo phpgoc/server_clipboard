@@ -33,7 +33,6 @@ pub struct ClientMessage {
     pub room: String,
 }
 
-/// List of available rooms
 pub struct ListRooms;
 
 impl actix::Message for ListRooms {
@@ -50,7 +49,7 @@ pub struct Join {
 }
 
 pub struct WsServer {
-    sessions: HashMap<usize, Recipient<Message>>,
+    sessions: HashMap<usize, (Recipient<Message>, String)>,
     rooms: HashMap<String, (i32, u64, Vec<usize>)>,
     map: web::Data<Mutex<HashMap<String, structs::Value>>>,
     queue: web::Data<Mutex<BinaryHeap<structs::StructInDeleteQueue>>>,
@@ -83,7 +82,7 @@ impl WsServer {
         if let Some((mut times, minutes, sessions)) = self.rooms.get(room) {
             for id in sessions {
                 if *id != skip_id {
-                    if let Some(addr) = self.sessions.get(id) {
+                    if let Some((addr, _)) = self.sessions.get(id) {
                         let _ = addr.do_send(Message(message.to_owned()));
                         times -= 1;
                         if times == 0 {
@@ -117,7 +116,7 @@ impl Handler<Connect> for WsServer {
 
     fn handle(&mut self, msg: Connect, _: &mut Context<Self>) -> Self::Result {
         let id = self.rng.gen::<usize>();
-        self.sessions.insert(id, msg.addr);
+        self.sessions.insert(id, (msg.addr, String::from("")));
         id
     }
 }
@@ -126,8 +125,16 @@ impl Handler<Disconnect> for WsServer {
     type Result = ();
 
     fn handle(&mut self, msg: Disconnect, _: &mut Context<Self>) {
-        if self.sessions.remove(&msg.id).is_some() {
-            println!("3");
+        if let Some((_, room)) = self.sessions.remove(&msg.id) {
+            let mut vec_len = 9999;
+            if let Some(tup) = self.rooms.get_mut(&room) {
+                let index = (*tup).2.iter().position(|x| *x == msg.id).unwrap();
+                tup.2.remove(index);
+                vec_len = tup.2.len();
+            }
+            if 0 == vec_len{
+                self.rooms.remove(&room);
+            }
         }
     }
 }
@@ -151,10 +158,12 @@ impl Handler<Join> for WsServer {
             minutes,
         } = msg;
         self.rooms
-            .entry(name)
+            .entry(name.clone())
             .or_insert((times, minutes, Vec::new()))
             .2
             .push(id);
+        let (_ ,room) = self.sessions.get_mut(&id).unwrap();
+        *room = name;
     }
 }
 const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(5);

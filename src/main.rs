@@ -147,11 +147,6 @@ async fn main() -> io::Result<()> {
             .service(index)
             .service(help)
             .service(put)
-            .service(web::resource("/html").route(web::get().to(|| {
-                HttpResponse::Ok()
-                    .content_type("text/html")
-                    .body(html::WS_HTML)
-            })))
             .service(web::resource("/ws/").to(ws_mod::chat_route))
             .service(get)
     })
