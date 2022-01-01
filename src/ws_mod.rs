@@ -1,10 +1,11 @@
 use actix::prelude::*;
 use rand::{self, rngs::ThreadRng, Rng};
 
-use std::collections::HashMap;
+use std::collections::{BinaryHeap, HashMap};
+use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
-use crate::structs;
+use crate::{structs, tools, Value};
 use actix_web::{web, Error, HttpRequest, HttpResponse};
 use actix_web_actors::ws;
 
@@ -51,17 +52,23 @@ pub struct Join {
 pub struct WsServer {
     sessions: HashMap<usize, Recipient<Message>>,
     rooms: HashMap<String, (i32, u64, Vec<usize>)>,
+    map: web::Data<Mutex<HashMap<String, structs::Value>>>,
+    queue: web::Data<Mutex<BinaryHeap<structs::StructInDeleteQueue>>>,
     rng: ThreadRng,
 }
 
 impl WsServer {
-    pub(crate) fn new(// _map: web::Data<Mutex<HashMap<String, structs::Value>>>,
+    pub(crate) fn new(
+        map: web::Data<Mutex<HashMap<String, structs::Value>>>,
+        queue: web::Data<Mutex<BinaryHeap<structs::StructInDeleteQueue>>>,
     ) -> WsServer {
         let rooms = HashMap::new();
 
         WsServer {
             sessions: HashMap::new(),
             rooms,
+            map,
+            queue,
             rng: rand::thread_rng(),
         }
     }
@@ -69,13 +76,34 @@ impl WsServer {
 
 impl WsServer {
     fn send_message(&self, room: &str, message: &str, skip_id: usize) {
-        if let Some((_,_,sessions)) = self.rooms.get(room) {
+        let mut locked_map = self.map.lock().unwrap();
+        if locked_map.contains_key(room) {
+            return;
+        }
+        if let Some((mut times, minutes, sessions)) = self.rooms.get(room) {
             for id in sessions {
                 if *id != skip_id {
                     if let Some(addr) = self.sessions.get(id) {
                         let _ = addr.do_send(Message(message.to_owned()));
+                        times -= 1;
+                        if times == 0 {
+                            break;
+                        }
                     }
                 }
+            }
+            if 0 != times {
+                let create_time = tools::now_timestamps();
+                let mut v = Value::new(message, create_time);
+                v.times = times;
+                locked_map.insert(String::from(room), v);
+                let delete_struct = structs::StructInDeleteQueue::new(
+                    create_time + 60 * minutes,
+                    create_time,
+                    String::from(room),
+                );
+                let mut locked_queue = self.queue.lock().unwrap();
+                locked_queue.push(delete_struct);
             }
         }
     }
@@ -125,7 +153,8 @@ impl Handler<Join> for WsServer {
         self.rooms
             .entry(name)
             .or_insert((times, minutes, Vec::new()))
-            .2.push(id);
+            .2
+            .push(id);
     }
 }
 const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(5);
@@ -226,7 +255,8 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for WsChatSession {
                                 if let Some(t) = params.times {
                                     times = t;
                                 }
-                                if let Some(t) = params.minutes {
+                                if let Some(mut t) = params.minutes {
+                                    t = t.min(60 * 24 * 7);
                                     minutes = t;
                                 }
                             }

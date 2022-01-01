@@ -100,11 +100,10 @@ pub(crate) const GET: &str = r#"<!DOCTYPE html>
   </head>
 
   <body>
-       <span id="clipboard_text"></span>
+       <span id="clipboard_text">{{}}</span>
   </body>
 </html>
 "#;
-
 
 pub const WS_HTML: &str = r#"<!DOCTYPE html>
 <html>

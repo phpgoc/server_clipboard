@@ -1,8 +1,8 @@
+mod html;
 mod structs;
 mod tcp_listener;
 mod tools;
 mod ws_mod;
-mod html;
 
 #[macro_use]
 extern crate actix_web;
@@ -11,19 +11,17 @@ extern crate clap;
 use crate::structs::Value;
 use actix_web::{middleware, web, App, HttpRequest, HttpResponse, HttpServer, Responder};
 
+use actix::Actor;
 use std::collections::{BinaryHeap, HashMap};
 use std::io;
 use std::sync::Mutex;
 use std::thread::{sleep, spawn};
 use std::time::Duration;
-use actix::Actor;
 
 #[get("/")]
 async fn index(map: web::Data<Mutex<HashMap<String, structs::Value>>>) -> impl Responder {
     let mut r = String::from("<a href=\"/help\">help</a>");
-    r.push_str(
-        html::INDEX,
-    );
+    r.push_str(html::INDEX);
     let locked_map = map.lock().unwrap();
     if locked_map.len() != 0 {
         r.push_str("<br>list:<ul>");
@@ -73,7 +71,7 @@ async fn put(
         v.times = t;
     }
     let delete_time = if let Some(mut t) = params.minutes {
-        t = t.min(60*24*7);
+        t = t.min(60 * 24 * 7);
         create_time + t * 60
     } else {
         create_time + 60
@@ -99,18 +97,21 @@ async fn get(
     }
     let mut times = -1;
     let mut locked_map = map.lock().unwrap();
-    let mut body = String::new();
+
+    let before_value: String;
     if let Some(v) = locked_map.get_mut(&key) {
         v.times -= 1;
         times = v.times;
-        body.push_str(&format!("<span id='t'>{}<span>", v.value));
+        before_value = v.value.clone();
     } else {
-        body.push_str("<span id='t'><span>");
-    }
+        before_value = String::from("");
+    };
     if 0 == times {
         locked_map.remove(&key);
     }
-    HttpResponse::Ok().content_type("text/html").body(body)
+    HttpResponse::Ok()
+        .content_type("text/html")
+        .body(html::GET.replace("{{}}", &*before_value))
 }
 #[actix_web::main]
 async fn main() -> io::Result<()> {
@@ -133,7 +134,7 @@ async fn main() -> io::Result<()> {
     let delete_queue =
         web::Data::new(Mutex::new(BinaryHeap::<structs::StructInDeleteQueue>::new()));
 
-    let ws_server = ws_mod::WsServer::new().start();
+    let ws_server = ws_mod::WsServer::new(map.clone(), delete_queue.clone()).start();
 
     delete_expired_thread(delete_queue.clone(), map.clone());
     tcp_listener::tcp_listener(map.clone(), tcp_port);
@@ -147,10 +148,9 @@ async fn main() -> io::Result<()> {
             .service(help)
             .service(put)
             .service(web::resource("/html").route(web::get().to(|| {
-                HttpResponse::Ok().content_type("text/html").body( html::WS_HTML)
-            })))
-            .service(web::resource("/test").route(web::get().to(|| {
-                HttpResponse::Ok().content_type("text/html").body( html::GET)
+                HttpResponse::Ok()
+                    .content_type("text/html")
+                    .body(html::WS_HTML)
             })))
             .service(web::resource("/ws/").to(ws_mod::chat_route))
             .service(get)
