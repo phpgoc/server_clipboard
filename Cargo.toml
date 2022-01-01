@@ -15,4 +15,4 @@ serde = "1.0.131"
 actix-web-actors = "3.0.0"
 actix = "0.10.0"
 clap = {version = "2.34.0", features = ["yaml"]}
-rand = "*"
+rand = "0.8.4"

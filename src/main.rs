@@ -51,7 +51,7 @@ async fn put(
     if key.len() > 32 {
         return "key too long";
     }
-    if value.len() == 0 {
+    if value.is_empty() {
         return "value is empty";
     }
     let mut locked_map = map.lock().unwrap();
@@ -76,7 +76,7 @@ async fn put(
     } else {
         create_time + 60
     };
-    if let Some(_) = params.private {
+    if params.private.is_some() {
         v.public = false;
     }
     locked_map.insert(key.clone(), v);

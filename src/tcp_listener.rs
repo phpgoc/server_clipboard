@@ -8,7 +8,7 @@ use std::thread::spawn;
 
 pub(crate) fn tcp_listener(map: web::Data<Mutex<HashMap<String, structs::Value>>>, tcp_port: i32) {
     spawn(move || {
-        let listener = TcpListener::bind(format!("127.0.0.1:{}",tcp_port)).unwrap();
+        let listener = TcpListener::bind(format!("127.0.0.1:{}", tcp_port)).unwrap();
 
         // accept connections and process them serially
         for stream in listener.incoming() {
@@ -26,21 +26,20 @@ pub(crate) fn tcp_listener(map: web::Data<Mutex<HashMap<String, structs::Value>>
 fn handle_client(mut stream: TcpStream, map: &web::Data<Mutex<HashMap<String, structs::Value>>>) {
     let mut key = String::new();
     let mut reader = BufReader::new(stream.try_clone().unwrap());
-    stream.write(b" choose delete key.").unwrap();
+    stream.write_all(b" choose delete key.").unwrap();
     stream.flush().unwrap();
-    while let Ok(_) = reader.read_line(&mut key) {
+    while reader.read_line(&mut key).is_ok() {
         let key_trim = key.trim();
         let mut lock_map = map.lock().unwrap();
         if key_trim == "clearall" {
-            stream.write(b"clear all\n").unwrap();
+            stream.write_all(b"clear all\n").unwrap();
             lock_map.clear();
+        } else if lock_map.remove(key_trim).is_some() {
+            stream.write_all(b"ok\n").unwrap();
         } else {
-            if let Some(_) = lock_map.remove(key_trim) {
-                stream.write(b"ok\n").unwrap();
-            } else {
-                stream.write(b"none\n").unwrap();
-            }
+            stream.write_all(b"none\n").unwrap();
         }
+
         drop(lock_map);
         key.clear();
     }
