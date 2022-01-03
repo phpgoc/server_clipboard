@@ -1,14 +1,24 @@
-name: 剪贴板服务
-version: "0.1.0"
-author: zxq. <phpgoc@icloud.com>
+name: server_clipboard
+version: "0.2.0"
+author: zxq <phpgoc@icloud.com>
 args:
   - http_port:
       short: p
       long: port
-      help: web端口
+      help: http/https port
       takes_value: true
   - tcp_port:
       short: t
       long: tcp
-      help: tcp端口
+      help: tcp port
+      takes_value: true
+  - key:
+      short: k
+      long: key
+      help: ssl key
+      takes_value: true
+  - cert:
+      short: c
+      long: cert
+      help: ssl cert
       takes_value: true

@@ -1,3 +1,29 @@
+
+## 获取
+
+``
+    cargo install server_clipboard
+``
+
+## https证书
+
+- 测试环境自己生成
+- 没有https无法获得剪贴板权限，火狐ie剪贴板权限都不支持
+- If you want to generate your own cert/private key file, then run:
+
+
+```bash
+    mkcert test.xx
+```
+
+`mkcert`: https://github.com/FiloSottile/mkcert
+
+
+## 运行
+``
+    server_clipboard -c cert.pem -k key.pem
+``
+
 ## 存入k,v<br>
 ``
 curl -X POST -d "[value]" [HOST]/[key] 

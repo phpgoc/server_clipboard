@@ -132,7 +132,7 @@ impl Handler<Disconnect> for WsServer {
                 tup.2.remove(index);
                 vec_len = tup.2.len();
             }
-            if 0 == vec_len{
+            if 0 == vec_len {
                 self.rooms.remove(&room);
             }
         }
@@ -162,7 +162,7 @@ impl Handler<Join> for WsServer {
             .or_insert((times, minutes, Vec::new()))
             .2
             .push(id);
-        let (_ ,room) = self.sessions.get_mut(&id).unwrap();
+        let (_, room) = self.sessions.get_mut(&id).unwrap();
         *room = name;
     }
 }

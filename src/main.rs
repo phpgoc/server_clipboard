@@ -12,6 +12,7 @@ use crate::structs::Value;
 use actix_web::{middleware, web, App, HttpRequest, HttpResponse, HttpServer, Responder};
 
 use actix::Actor;
+use openssl::ssl::{SslAcceptor, SslFiletype, SslMethod};
 use std::collections::{BinaryHeap, HashMap};
 use std::io;
 use std::sync::Mutex;
@@ -130,6 +131,9 @@ async fn main() -> io::Result<()> {
         .unwrap_or("9527")
         .parse::<i32>()
         .unwrap_or(9527);
+    let key = matches.value_of("key");
+    let cert = matches.value_of("cert");
+
     let map = web::Data::new(Mutex::new(HashMap::<String, structs::Value>::new()));
     let delete_queue =
         web::Data::new(Mutex::new(BinaryHeap::<structs::StructInDeleteQueue>::new()));
@@ -138,7 +142,7 @@ async fn main() -> io::Result<()> {
 
     delete_expired_thread(delete_queue.clone(), map.clone());
     tcp_listener::tcp_listener(map.clone(), tcp_port);
-    HttpServer::new(move || {
+    let server = HttpServer::new(move || {
         App::new()
             .app_data(map.clone())
             .app_data(delete_queue.clone())
@@ -149,10 +153,22 @@ async fn main() -> io::Result<()> {
             .service(put)
             .service(web::resource("/ws/").to(ws_mod::chat_route))
             .service(get)
-    })
-    .bind(format!("0.0.0.0:{}", http_port))?
-    .run()
-    .await
+    });
+    if key.is_some() && cert.is_some() {
+        let mut builder = SslAcceptor::mozilla_intermediate(SslMethod::tls()).unwrap();
+        builder
+            .set_private_key_file(key.unwrap(), SslFiletype::PEM)
+            .unwrap();
+        builder.set_certificate_chain_file(cert.unwrap()).unwrap();
+        println!("Started https server: 0.0.0.0:{}", http_port);
+        server
+            .bind_openssl(format!("0.0.0.0:{}", http_port), builder)?
+            .run()
+            .await
+    } else {
+        println!("Started http server: 0.0.0.0:{}", http_port);
+        server.bind(format!("0.0.0.0:{}", http_port))?.run().await
+    }
 }
 
 fn delete_expired_thread(

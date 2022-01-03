@@ -67,8 +67,8 @@ pub(crate) const GET: &str = r#"<!DOCTYPE html>
 
         }
         const connect = () => {
-          const wsUri =
-           'ws://' +
+         const wsUri =
+            (window.location.protocol === 'https:' ? 'wss://' : 'ws://') +
             window.location.host +
             '/ws/'
           conn = new WebSocket(wsUri)
@@ -105,4 +105,3 @@ pub(crate) const GET: &str = r#"<!DOCTYPE html>
   </body>
 </html>
 "#;
-
