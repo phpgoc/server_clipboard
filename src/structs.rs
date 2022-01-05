@@ -1,4 +1,4 @@
-use serde_derive::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
 
 pub(crate) struct Value {
@@ -53,7 +53,6 @@ impl Eq for StructInDeleteQueue {}
 impl Ord for StructInDeleteQueue {
     fn cmp(&self, other: &Self) -> Ordering {
         other.delete_time.cmp(&self.delete_time)
-        // self.delete_time.cmp(&other.delete_time)
     }
 }
 
@@ -68,3 +67,14 @@ pub(crate) struct Params {
     pub(crate) minutes: Option<u64>,
     pub(crate) private: Option<String>,
 }
+
+#[derive(Serialize, Deserialize)]
+pub(crate) struct WsResponse {
+    pub(crate) times: Option<i32>,
+    pub(crate) minutes: Option<u64>,
+    pub(crate) message: Option<String>,
+    pub(crate) remaining: Option<i32>,
+    pub(crate) total:Option<usize>,
+    pub(crate) result:Option<String>
+}
+

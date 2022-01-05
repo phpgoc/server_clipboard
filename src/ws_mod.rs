@@ -5,6 +5,7 @@ use std::collections::{BinaryHeap, HashMap};
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
+use crate::structs::WsResponse;
 use crate::{structs, tools, Value};
 use actix_web::{web, Error, HttpRequest, HttpResponse};
 use actix_web_actors::ws;
@@ -74,16 +75,39 @@ impl WsServer {
 }
 
 impl WsServer {
-    fn send_message(&self, room: &str, message: &str, skip_id: usize) {
+    fn send_join_message(&self, room: &str, ws_response: WsResponse) {
+        if let Some((_, _, sessions)) = self.rooms.get(room) {
+            let result_string = serde_json::to_string(&ws_response).unwrap();
+
+            for id in sessions {
+                if let Some((addr, _)) = self.sessions.get(id) {
+                    let _ = addr.do_send(Message(result_string.clone()));
+                }
+            }
+        }
+    }
+
+    fn send_message(&self, room: &str, mut ws_response: WsResponse, skip_id: usize) {
         let mut locked_map = self.map.lock().unwrap();
         if locked_map.contains_key(room) {
+            //key 没有被消耗光
+            if let Some((addr,_)) = self.sessions.get(&skip_id){
+                ws_response.result = Some("remaining is not zero".to_string());
+                let _ = addr.do_send(Message(
+                    serde_json::to_string(&ws_response).unwrap()
+                ));
+            }
             return;
+        }else{
+            ws_response.result = Some("".to_string());
         }
         if let Some((mut times, minutes, sessions)) = self.rooms.get(room) {
+            let mut address = vec![];
             for id in sessions {
                 if *id != skip_id {
                     if let Some((addr, _)) = self.sessions.get(id) {
-                        let _ = addr.do_send(Message(message.to_owned()));
+                        // let _ = addr.do_send(Message(message.to_owned()));
+                        address.push(addr);
                         times -= 1;
                         if times == 0 {
                             break;
@@ -91,9 +115,15 @@ impl WsServer {
                     }
                 }
             }
+            ws_response.remaining = Some(times);
+            let result_string = serde_json::to_string(&ws_response).unwrap();
+            for i in address {
+                let _ = i.do_send(Message(result_string.clone()));
+            }
+
             if 0 != times {
                 let create_time = tools::now_timestamps();
-                let mut v = Value::new(message, create_time);
+                let mut v = Value::new(ws_response.message.unwrap(), create_time);
                 v.times = times;
                 locked_map.insert(String::from(room), v);
                 let delete_struct = structs::StructInDeleteQueue::new(
@@ -103,6 +133,11 @@ impl WsServer {
                 );
                 let mut locked_queue = self.queue.lock().unwrap();
                 locked_queue.push(delete_struct);
+            }
+            if let Some((addr, _))  = self.sessions.get(&skip_id){
+                ws_response.message = None;
+                ws_response.result = Some("ok".to_string());
+                let _ = addr.do_send( Message(serde_json::to_string(&ws_response).unwrap()));
             }
         }
     }
@@ -134,6 +169,17 @@ impl Handler<Disconnect> for WsServer {
             }
             if 0 == vec_len {
                 self.rooms.remove(&room);
+            } else {
+                let res = WsResponse {
+                    times: None,
+                    minutes: None,
+                    message: None,
+                    remaining: None,
+                    total: Some(vec_len),
+                    result: None
+                };
+
+                self.send_join_message(&room, res);
             }
         }
     }
@@ -143,7 +189,18 @@ impl Handler<ClientMessage> for WsServer {
     type Result = ();
 
     fn handle(&mut self, msg: ClientMessage, _: &mut Context<Self>) {
-        self.send_message(&msg.room, msg.msg.as_str(), msg.id);
+        self.send_message(
+            &msg.room,
+            WsResponse {
+                times: None,
+                minutes: None,
+                message: Some(msg.msg),
+                remaining: None,
+                total: None,
+                result: None
+            },
+            msg.id,
+        );
     }
 }
 
@@ -157,13 +214,23 @@ impl Handler<Join> for WsServer {
             times,
             minutes,
         } = msg;
-        self.rooms
+        let cur_room = self
+            .rooms
             .entry(name.clone())
-            .or_insert((times, minutes, Vec::new()))
-            .2
-            .push(id);
+            .or_insert((times, minutes, Vec::new()));
+        cur_room.2.push(id);
         let (_, room) = self.sessions.get_mut(&id).unwrap();
-        *room = name;
+        *room = name.clone();
+        let res = WsResponse {
+            times: Some((*cur_room).0),
+            minutes: Some((*cur_room).1),
+            message: None,
+            remaining: None,
+            total: Some(cur_room.2.len()),
+            result: None
+        };
+
+        self.send_join_message(&name, res);
     }
 }
 const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(5);
@@ -178,7 +245,7 @@ pub(crate) async fn chat_route(
         WsChatSession {
             id: 0,
             hb: Instant::now(),
-            room: "Main".to_owned(),
+            room: "".to_owned(),
             name: None,
             address: srv.get_ref().clone(),
         },
@@ -217,7 +284,7 @@ impl Actor for WsChatSession {
     }
 
     fn stopping(&mut self, _: &mut Self::Context) -> Running {
-        self.address.do_send(Disconnect { id: self.id });
+        let _ = self.address.do_send(Disconnect { id: self.id });
         Running::Stop
     }
 }
@@ -270,7 +337,7 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for WsChatSession {
                                 }
                             }
                         }
-                        self.address.do_send(Join {
+                        let _ = self.address.do_send(Join {
                             id: self.id,
                             name: self.room.clone(),
                             times,
@@ -311,7 +378,7 @@ impl WsChatSession {
         ctx.run_interval(HEARTBEAT_INTERVAL, |act, ctx| {
             if Instant::now().duration_since(act.hb) > CLIENT_TIMEOUT {
                 println!("Websocket Client heartbeat failed, disconnecting!");
-                act.address.do_send(Disconnect { id: act.id });
+                let _ = act.address.do_send(Disconnect { id: act.id });
                 ctx.stop();
                 return;
             }

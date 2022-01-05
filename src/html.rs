@@ -47,6 +47,8 @@ pub(crate) const GET: &str = r#"<!DOCTYPE html>
       const pathname = window.location.pathname
       const queryString = window.location.search
       const joinString = "/join " + pathname + " " + queryString
+      let needConfirm = false
+      let wsData = null
       window.onload = () => {
         let conn = null
         const do_send_receive =  () => {
@@ -79,7 +81,26 @@ pub(crate) const GET: &str = r#"<!DOCTYPE html>
           }
           conn.onmessage = function (e) {
             console.log('Received: ' + e.data)
-            clipboard_text.innerHTML =  e.data
+
+            wsData = JSON.parse(e.data)
+            if (wsData.message){
+                clipboard_text.innerHTML =  wsData.message
+            }
+            if (wsData.times){
+                times.innerHTML =  wsData.times
+            }
+            if (wsData.minutes){
+                minutes.innerHTML =  wsData.minutes
+            }
+            if (wsData.total){
+                total.innerHTML =  wsData.total
+            }
+            if (wsData.result){
+                result.innerHTML =  wsData.result
+            }
+            if (wsData.remaining){
+                remaining.innerHTML =  wsData.remaining
+            }
           }
           conn.onclose = function () {
             console.log('Disconnected.')
@@ -101,7 +122,30 @@ pub(crate) const GET: &str = r#"<!DOCTYPE html>
   </head>
 
   <body>
-       <span id="clipboard_text">{{}}</span>
+       <table>
+        <tr>
+            <td>times</td>
+            <td id="times"></td>
+             <td>minutes</td>
+            <td id="minutes"></td>
+
+        </tr>
+
+        <tr>
+            <td>remaining</td>
+            <td id="remaining"></td>
+            <td>total</td>
+            <td id="total"></td>
+        </tr>
+        <tr>
+            <td>result</td>
+            <td id="result"></td>
+        </tr>
+        <tr>
+            <td>text</td>
+            <td cosplan="3" id="clipboard_text">{{}}</td>
+        </tr>
+       </table>
   </body>
 </html>
 "#;
