@@ -9,7 +9,10 @@ use std::thread::spawn;
 pub(crate) fn tcp_listener(map: web::Data<Mutex<HashMap<String, structs::Value>>>, tcp_port: i32) {
     spawn(move || {
         let listener = TcpListener::bind(format!("127.0.0.1:{}", tcp_port)).unwrap();
-
+        println!(
+            "Started tcp listener: {}",
+            format!("127.0.0.1:{}", tcp_port)
+        );
         // accept connections and process them serially
         for stream in listener.incoming() {
             match stream {

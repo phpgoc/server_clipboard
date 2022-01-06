@@ -1,4 +1,10 @@
 pub(crate) const INDEX: &str = r#"
+<style>
+li {
+    float: left;
+    width: 33%;
+}
+</style>
 <div>
     key: <input id="k">
     value: <textarea  id="v"></textarea>
@@ -27,7 +33,7 @@ function s(){
 pub(crate) const HELP: &str = r#"
 <ol>
     <li> 存入k,v<br><code>curl -X POST -d "[value]" [server]/[key] </code></li>
-    <li> 获取k <br><code> curl [server]/[key]</code></li>
+    <li> 获取k <br><code> curl [server]/[key]?quiet</code></li>
     <li> 可以获取的次数默认1 <br> 可选项  times int  </li>
     <li> 保存的分钟 默认1分钟 <br> 可选项 minutes int </li>
     <li> 是否在首页列表显示 <br> 可选项 private 任意string </li>
@@ -98,7 +104,7 @@ pub(crate) const GET: &str = r#"<!DOCTYPE html>
             if (wsData.result){
                 result.innerHTML =  wsData.result
             }
-            if (wsData.remaining){
+            if (wsData.remaining !== null){
                 remaining.innerHTML =  wsData.remaining
             }
           }
@@ -119,6 +125,14 @@ pub(crate) const GET: &str = r#"<!DOCTYPE html>
         }
       }
     </script>
+<style>
+table td {
+    border: 1px solid;
+}
+td {
+    width: 20%;
+}
+</style>
   </head>
 
   <body>
@@ -134,16 +148,16 @@ pub(crate) const GET: &str = r#"<!DOCTYPE html>
         <tr>
             <td>remaining</td>
             <td id="remaining"></td>
-            <td>total</td>
+            <td>Number of rooms</td>
             <td id="total"></td>
         </tr>
         <tr>
             <td>result</td>
-            <td id="result"></td>
+            <td id="result" colspan="2"></td>
         </tr>
         <tr>
             <td>text</td>
-            <td cosplan="3" id="clipboard_text">{{}}</td>
+            <td colspan="3" id="clipboard_text">{{}}</td>
         </tr>
        </table>
   </body>

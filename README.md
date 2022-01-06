@@ -31,7 +31,7 @@ curl -X POST -d "[value]" [HOST]/[key]
 
 ## 获取k 
 ``
-curl [HOST]/[key]
+curl [HOST]/[key]?quiet
 ``
 ## 参数，
 ### POST和 websocket的第一进入房间的人有效

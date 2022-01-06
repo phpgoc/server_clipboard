@@ -89,16 +89,15 @@ impl WsServer {
 
     fn send_message(&self, room: &str, mut ws_response: WsResponse, skip_id: usize) {
         let mut locked_map = self.map.lock().unwrap();
-        if locked_map.contains_key(room) {
+        if let Some(v) = locked_map.get(room) {
             //key 没有被消耗光
-            if let Some((addr,_)) = self.sessions.get(&skip_id){
+            if let Some((addr, _)) = self.sessions.get(&skip_id) {
                 ws_response.result = Some("remaining is not zero".to_string());
-                let _ = addr.do_send(Message(
-                    serde_json::to_string(&ws_response).unwrap()
-                ));
+                ws_response.remaining = Some(v.times);
+                let _ = addr.do_send(Message(serde_json::to_string(&ws_response).unwrap()));
             }
             return;
-        }else{
+        } else {
             ws_response.result = Some("".to_string());
         }
         if let Some((mut times, minutes, sessions)) = self.rooms.get(room) {
@@ -134,10 +133,10 @@ impl WsServer {
                 let mut locked_queue = self.queue.lock().unwrap();
                 locked_queue.push(delete_struct);
             }
-            if let Some((addr, _))  = self.sessions.get(&skip_id){
+            if let Some((addr, _)) = self.sessions.get(&skip_id) {
                 ws_response.message = None;
                 ws_response.result = Some("ok".to_string());
-                let _ = addr.do_send( Message(serde_json::to_string(&ws_response).unwrap()));
+                let _ = addr.do_send(Message(serde_json::to_string(&ws_response).unwrap()));
             }
         }
     }
@@ -176,7 +175,7 @@ impl Handler<Disconnect> for WsServer {
                     message: None,
                     remaining: None,
                     total: Some(vec_len),
-                    result: None
+                    result: None,
                 };
 
                 self.send_join_message(&room, res);
@@ -197,7 +196,7 @@ impl Handler<ClientMessage> for WsServer {
                 message: Some(msg.msg),
                 remaining: None,
                 total: None,
-                result: None
+                result: None,
             },
             msg.id,
         );
@@ -227,7 +226,7 @@ impl Handler<Join> for WsServer {
             message: None,
             remaining: None,
             total: Some(cur_room.2.len()),
-            result: None
+            result: None,
         };
 
         self.send_join_message(&name, res);

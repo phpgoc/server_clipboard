@@ -66,6 +66,7 @@ pub(crate) struct Params {
     pub(crate) times: Option<i32>,
     pub(crate) minutes: Option<u64>,
     pub(crate) private: Option<String>,
+    pub(crate) quiet: Option<String>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -74,7 +75,6 @@ pub(crate) struct WsResponse {
     pub(crate) minutes: Option<u64>,
     pub(crate) message: Option<String>,
     pub(crate) remaining: Option<i32>,
-    pub(crate) total:Option<usize>,
-    pub(crate) result:Option<String>
+    pub(crate) total: Option<usize>,
+    pub(crate) result: Option<String>,
 }
-

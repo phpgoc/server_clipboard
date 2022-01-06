@@ -90,6 +90,7 @@ async fn put(
 async fn get(
     web::Path(key): web::Path<String>,
     map: web::Data<Mutex<HashMap<String, structs::Value>>>,
+    req: HttpRequest,
 ) -> impl Responder {
     if key.len() > 50 {
         return HttpResponse::Ok()
@@ -110,6 +111,13 @@ async fn get(
     if 0 == times {
         locked_map.remove(&key);
     }
+    if let Ok(params) = web::Query::<structs::Params>::from_query(req.query_string()) {
+        if params.quiet.is_some() {
+            return HttpResponse::Ok()
+                .content_type("text/plain")
+                .body(before_value);
+        }
+    };
     HttpResponse::Ok()
         .content_type("text/html")
         .body(html::GET.replace("{{}}", &*before_value))
