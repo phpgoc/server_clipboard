@@ -24,20 +24,21 @@
     server_clipboard -c cert.pem -k key.pem
 ``
 
-## 存入k,v<br>
+## 存入key, value<br>
 ``
-curl -X POST -d "[value]" [HOST]/[key] 
+    curl -X POST -d "$value" $host/$key
 ``
 
 ## 获取k 
 ``
-curl [HOST]/[key]?quiet
+    curl $host/$key?quiet
 ``
 ## 参数，
 ### POST和 websocket的第一进入房间的人有效
-- 可以获取的次数默认1 可选项  times int 
-- 保存的分钟 默认1分钟  可选项 minutes int 
-- 是否在首页列表显示 可选项 private 任意string ，websocket都是public的
+- times optional int  可以获取的次数默认1 
+- minutes optional int 保存的分钟 默认1分钟    
+- private optional any 是否在首页列表显示，websocket都是public的
+- quiet option any get页独有，禁用websocket，为了curl
 
 ## demo 
 

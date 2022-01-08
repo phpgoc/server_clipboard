@@ -44,24 +44,57 @@ pub(crate) const HELP: &str = r#"
 <html lang="en">
 <head>
     <title>help</title>
+    <style>
+        table td {
+            border: 1px solid;
+        }
+    </style>
 </head>
 <body>
-    <ol>
-        <li> save k,v<br><code>curl -X POST -d "[value]" [server]/[key] </code></li>
-        <li> get k <br><code> curl [server]/[key]?quiet</code></li>
-        <li>
-            The number of times that can be obtained Default 11 <br> optional times int
-        </li>
-        <li>
-            Saved minutes Default 1 minute <br> optional minutes int
-        </li>
-        <li>
-            Whether to display on the home page list <br> optional private any
-        </li>
-        <li> demo <br> curl -X POST -d "abcdefg" "localhost:7259/abc?times=2&private"</li>
-        <li> Get page support websocket .Click to write or read the clipboard.
-        </li>
-    </ol>
+<table>
+    <thead>
+    <td style="width: 20%">key</td>
+    <td style="width: 70%">description</td>
+    </thead>
+
+    <tr>
+        <td>store key, value</td>
+        <td><code>curl -X POST -d "$value" $host/$key </code></td>
+    </tr>
+    <tr>
+        <td>get by key</td>
+        <td><code> curl $host/$key?quiet</code></td>
+    </tr>
+    <tr>
+        <td>times optional int</td>
+        <td> The number of times that can be obtained, Default 1 time</td>
+    </tr>
+    <tr>
+        <td>minutes optional int</td>
+        <td> Saved minutes, Default 1 minute</td>
+    </tr>
+    <tr>
+        <td>private optional any</td>
+        <td>Whether to display on the home page list, store page only</td>
+    </tr>
+    <tr>
+        <td>quiet optional any</td>
+        <td>Passing this parameter will close websocket function, get page only, for curl</td>
+    </tr>
+    <tr>
+        <td>demo</td>
+        <td><code>curl -X POST -d "abcdef" "localhost:7259/abc?times=2&private"</code></td>
+    </tr>
+    <tr>
+        <td>websocket</td>
+        <td>Get page support websocket .Click to write or read the clipboard, must be https</td>
+    </tr>
+    <tr>
+        <td></td>
+        <td>
+times minutes .These two parameters will take effect when the first one enters the websocket room</td>
+    </tr>
+</table>
 </body>
 </html>
 "#;
