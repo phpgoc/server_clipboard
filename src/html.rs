@@ -31,135 +31,180 @@ function s(){
     "#;
 
 pub(crate) const HELP: &str = r#"
-<ol>
-    <li> 存入k,v<br><code>curl -X POST -d "[value]" [server]/[key] </code></li>
-    <li> 获取k <br><code> curl [server]/[key]?quiet</code></li>
-    <li> 可以获取的次数默认1 <br> 可选项  times int  </li>
-    <li> 保存的分钟 默认1分钟 <br> 可选项 minutes int </li>
-    <li> 是否在首页列表显示 <br> 可选项 private 任意string </li>
-    <li> demo <br> curl -X POST -d "abcdefg" "localhost:7259/abc?times=2&private=a" </li>
-    <li> get页面支持websocket,鼠标单击就会write 或 read 剪贴板 </li>
-</ol>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>help</title>
+</head>
+<body>
+    <ol>
+        <li> save k,v<br><code>curl -X POST -d "[value]" [server]/[key] </code></li>
+        <li> get k <br><code> curl [server]/[key]?quiet</code></li>
+        <li>
+            The number of times that can be obtained Default 11 <br> optional times int
+        </li>
+        <li>
+            Saved minutes Default 1 minute <br> optional minutes int
+        </li>
+        <li>
+            Whether to display on the home page list <br> optional private any
+        </li>
+        <li> demo <br> curl -X POST -d "abcdefg" "localhost:7259/abc?times=2&private"</li>
+        <li> Get page support websocket .Click to write or read the clipboard.
+        </li>
+    </ol>
+</body>
+</html>
 "#;
 
-pub(crate) const GET: &str = r#"<!DOCTYPE html>
-<html>
-  <head>
+pub(crate) const GET: &str = r#"
+<!DOCTYPE html>
+<html lang="en">
+<head>
     <title>get</title>
-    <meta charset="utf-8" />
+    <meta charset="utf-8"/>
     <script>
-      'use strict'
+        'use strict'
 
-      const pathname = window.location.pathname
-      const queryString = window.location.search
-      const joinString = "/join " + pathname + " " + queryString
-      let needConfirm = false
-      let wsData = null
-      window.onload = () => {
-        let conn = null
-        const do_send_receive =  () => {
-            if (!conn) return
-            let txt = clipboard_text.innerHTML
-            if(!txt){
-                navigator.clipboard.readText().then(
-                    clipText => {
-                        console.log(clipText)
-                        conn.send(clipText)
+        const pathname = window.location.pathname
+        const queryString = window.location.search
+        const joinString = "/join " + pathname + " " + queryString
+        var messageArray = []
+        let needConfirm = false
+        let wsData = null
+        window.onload = () => {
+            let conn = null
+            const set_text = (wsData) => {
+                if (wsData.message) {
+                    clipboard_text.innerHTML = wsData.message
+                }
+                if (wsData.times) {
+                    times.innerHTML = wsData.times
+                }
+                if (wsData.minutes) {
+                    minutes.innerHTML = wsData.minutes
+                }
+                if (wsData.total) {
+                    total.innerHTML = wsData.total
+                }
+                if (wsData.result) {
+                    result.innerHTML = wsData.result
+                }
+                if (wsData.remaining !== null) {
+                    remaining.innerHTML = wsData.remaining
+                }
+            }
+
+            const do_send_receive = () => {
+                if (!conn) return
+                let txt = clipboard_text.innerHTML
+                if (!txt) {
+                    navigator.clipboard.readText().then(
+                        clipText => {
+                            console.log(clipText)
+                            conn.send(clipText)
+                        }
+                    )
+                } else if (needConfirm) {
+                    if (confirm("Are you sure to overwrite your clipboard?")){
+                        needConfirm = false
+                        result.innerHTML = "click to write clipboard"
                     }
-                )
-            }else{
-                navigator.clipboard.writeText(txt).then(
-                    clipboard_text.innerHTML = ""
-                )
-            }
+                }else{
+                    navigator.clipboard.writeText(txt).then(() => {
+                        if (messageArray.length === 0) {
+                            clipboard_text.innerHTML = ""
+                            result.innerHTML = ""
+                            needConfirm = false
+                        } else {
+                            clipboard_text.innerHTML = messageArray.shift()
+                            queue.innerHTML = messageArray.length
+                            result.innerHTML = "click to confirm"
+                            needConfirm = true
+                        }
 
-        }
-        const connect = () => {
-         const wsUri =
-            (window.location.protocol === 'https:' ? 'wss://' : 'ws://') +
-            window.location.host +
-            '/ws/'
-          conn = new WebSocket(wsUri)
-          console.log('Connecting...')
-          conn.onopen = function () {
-            console.log(joinString)
-            conn.send(joinString)
-          }
-          conn.onmessage = function (e) {
-            console.log('Received: ' + e.data)
+                    })
+                }
 
-            wsData = JSON.parse(e.data)
-            if (wsData.message){
-                clipboard_text.innerHTML =  wsData.message
             }
-            if (wsData.times){
-                times.innerHTML =  wsData.times
+            const connect = () => {
+                const wsUri =
+                    (window.location.protocol === 'https:' ? 'wss://' : 'ws://') +
+                    window.location.host +
+                    '/ws/'
+                conn = new WebSocket(wsUri)
+                console.log('Connecting...')
+                conn.onopen = function () {
+                    console.log(joinString)
+                    conn.send(joinString)
+                }
+                conn.onmessage = function (e) {
+                    console.log('Received: ' + e.data)
+
+                    wsData = JSON.parse(e.data)
+                    if (clipboard_text.innerHTML === "") {
+                        set_text(wsData)
+                    } else {
+                        messageArray.push(wsData.message)
+                        queue.innerHTML = messageArray.length
+                    }
+
+                }
+                conn.onclose = function () {
+                    console.log('Disconnected.')
+                    conn = null
+                    setTimeout(() => connect(), 5000)
+                }
             }
-            if (wsData.minutes){
-                minutes.innerHTML =  wsData.minutes
+            connect()
+            window.onclick = () => {
+                do_send_receive()
             }
-            if (wsData.total){
-                total.innerHTML =  wsData.total
+            window.onkeyup = (e) => {
+                if (e.key === 'Enter') {
+                    do_send_receive()
+                }
             }
-            if (wsData.result){
-                result.innerHTML =  wsData.result
-            }
-            if (wsData.remaining !== null){
-                remaining.innerHTML =  wsData.remaining
-            }
-          }
-          conn.onclose = function () {
-            console.log('Disconnected.')
-            conn = null
-            setTimeout( ()=> connect(), 5000)
-          }
         }
-        connect()
-        window.onclick = () =>{
-            do_send_receive()
-        }
-        window.onkeyup = (e) => {
-          if (e.key === 'Enter') {
-            do_send_receive()
-          }
-        }
-      }
     </script>
-<style>
-table td {
-    border: 1px solid;
-}
-td {
-    width: 20%;
-}
-</style>
-  </head>
+    <style>
+        table td {
+            border: 1px solid;
+        }
 
-  <body>
-       <table>
-        <tr>
-            <td>times</td>
-            <td id="times"></td>
-             <td>minutes</td>
-            <td id="minutes"></td>
+        td {
+            width: 20%;
+        }
+    </style>
+</head>
 
-        </tr>
+<body>
+<table>
+    <tr>
+        <td>times</td>
+        <td id="times"></td>
+        <td>minutes</td>
+        <td id="minutes"></td>
 
-        <tr>
-            <td>remaining</td>
-            <td id="remaining"></td>
-            <td>Number of rooms</td>
-            <td id="total"></td>
-        </tr>
-        <tr>
-            <td>result</td>
-            <td id="result" colspan="2"></td>
-        </tr>
-        <tr>
-            <td>text</td>
-            <td colspan="3" id="clipboard_text">{{}}</td>
-        </tr>
-       </table>
-  </body>
+    </tr>
+
+    <tr>
+        <td>remaining</td>
+        <td id="remaining"></td>
+        <td>people in the room</td>
+        <td id="total"></td>
+    </tr>
+    <tr>
+        <td>result or hint</td>
+        <td id="result"></td>
+         <td>number in the queue</td>
+        <td id="queue"></td>
+    </tr>
+    <tr>
+        <td>text</td>
+        <td colspan="3" id="clipboard_text">{{}}</td>
+    </tr>
+</table>
+</body>
 </html>
 "#;
