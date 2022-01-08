@@ -1,34 +1,43 @@
 pub(crate) const INDEX: &str = r#"
-<style>
-li {
-    float: left;
-    width: 33%;
-}
-</style>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>server_clipboard</title>
+    <meta charset="utf-8"/>
+    <style>
+        li {
+            float: left;
+            width: 33%;
+        }
+    </style>
+    <script>
+        function s() {
+            let k = key.value
+            let v = val.value
+            var xhr = new XMLHttpRequest();
+            xhr.open("POST", "/" + k, true);
+            xhr.onreadystatechange = function () {
+                if (this.readyState != 4) return;
+
+                if (this.status == 200) {
+                    location.reload()
+                } else {
+                    alert("err")
+                }
+            };
+            xhr.send(v)
+        }
+    </script>
+</head>
+<body>
 <div>
-    key: <input id="k">
-    value: <textarea  id="v"></textarea>
+    key: <input id="key">
+    value: <textarea id="val"></textarea>
     <button onclick=s()>submit</button>
 </div>
-<script>
-function s(){
-    let k = (document.getElementById("k").value)
-    let v = (document.getElementById("v").value)
-    var xhr = new XMLHttpRequest();
-    xhr.open("POST", "/"+k, true);
-    xhr.onreadystatechange = function () {
-        if (this.readyState != 4) return;
-
-        if (this.status == 200) {
-            location.reload()
-        }else{
-            alert("err")
-        }
-    };
-    xhr.send(v)
-}
-</script>
-    "#;
+</body>
+</html>
+"#;
 
 pub(crate) const HELP: &str = r#"
 <!DOCTYPE html>
