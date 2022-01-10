@@ -1,3 +1,4 @@
+mod conf;
 mod html;
 mod structs;
 mod tcp_listener;
@@ -11,6 +12,7 @@ extern crate clap;
 use crate::structs::Value;
 use actix_web::{middleware, web, App, HttpRequest, HttpResponse, HttpServer, Responder};
 
+use crate::conf::DEFAULT_TCP_PORT;
 use actix::Actor;
 use openssl::ssl::{SslAcceptor, SslFiletype, SslMethod};
 use std::collections::{BinaryHeap, HashMap};
@@ -21,19 +23,21 @@ use std::time::Duration;
 
 #[get("/")]
 async fn index(map: web::Data<Mutex<HashMap<String, structs::Value>>>) -> impl Responder {
-    let mut r = String::from("<a href=\"/help\">help</a>");
-    r.push_str(html::INDEX);
+    let mut response_str = String::from("<a href=\"/help\">help</a>");
+    response_str.push_str(html::INDEX);
     let locked_map = map.lock().unwrap();
     if locked_map.len() != 0 {
-        r.push_str("<br>list:<ul>");
-        for (k, v) in locked_map.iter() {
-            if v.public {
-                r.push_str(&*format!("<li><a href=\"/{}\">{}</a></li>", k, k));
+        response_str.push_str("<br>list:<ul>");
+        for (key, value) in locked_map.iter() {
+            if value.public {
+                response_str.push_str(&*format!("<li><a href=\"/{}\">{}</a></li>", key, key));
             }
         }
-        r.push_str("</ul>");
+        response_str.push_str("</ul>");
     }
-    HttpResponse::Ok().content_type("text/html").body(r)
+    HttpResponse::Ok()
+        .content_type("text/html")
+        .body(response_str)
 }
 #[get("/help")]
 async fn help() -> impl Responder {
@@ -49,7 +53,7 @@ async fn put(
     req: HttpRequest,
     value: String,
 ) -> impl Responder {
-    if key.len() > 32 {
+    if key.len() > conf::KEY_SIZE {
         return "key too long";
     }
     if value.is_empty() {
@@ -60,16 +64,16 @@ async fn put(
         return "key exists";
     }
     let create_time = tools::now_timestamps();
-    let mut v = Value::new(&value, create_time);
+    let mut val = Value::new(&value, create_time);
     let params = match web::Query::<structs::Params>::from_query(req.query_string()) {
         Ok(t) => t,
         Err(e) => {
             println!("bad request: {:?}", e);
-            return "bad request!";
+            return "bad request";
         }
     };
     if let Some(t) = params.times {
-        v.times = t;
+        val.times = 1.max(t);
     }
     let delete_time = if let Some(mut t) = params.minutes {
         t = t.min(60 * 24 * 7);
@@ -78,12 +82,12 @@ async fn put(
         create_time + 60
     };
     if params.private.is_some() {
-        v.public = false;
+        val.public = false;
     }
-    locked_map.insert(key.clone(), v);
+    locked_map.insert(key.clone(), val);
     let delete_struct = structs::StructInDeleteQueue::new(delete_time, create_time, key);
-    let mut q = queue.lock().unwrap();
-    q.push(delete_struct);
+    let mut locked_queue = queue.lock().unwrap();
+    locked_queue.push(delete_struct);
     "ok"
 }
 #[get("/{key}")]
@@ -92,7 +96,7 @@ async fn get(
     map: web::Data<Mutex<HashMap<String, structs::Value>>>,
     req: HttpRequest,
 ) -> impl Responder {
-    if key.len() > 50 {
+    if key.len() > conf::KEY_SIZE {
         return HttpResponse::Ok()
             .content_type("text/plain")
             .body("key too long");
@@ -100,27 +104,24 @@ async fn get(
     let mut times = -1;
     let mut locked_map = map.lock().unwrap();
 
-    let before_value: String;
-    if let Some(v) = locked_map.get_mut(&key) {
-        v.times -= 1;
-        times = v.times;
-        before_value = v.value.clone();
+    let value = if let Some(val) = locked_map.get_mut(&key) {
+        val.times -= 1;
+        times = val.times;
+        val.value.clone()
     } else {
-        before_value = String::from("");
+        String::from("")
     };
     if 0 == times {
         locked_map.remove(&key);
     }
     if let Ok(params) = web::Query::<structs::Params>::from_query(req.query_string()) {
         if params.quiet.is_some() {
-            return HttpResponse::Ok()
-                .content_type("text/plain")
-                .body(before_value);
+            return HttpResponse::Ok().content_type("text/plain").body(value);
         }
     };
     HttpResponse::Ok()
         .content_type("text/html")
-        .body(html::GET.replace("{{}}", &*before_value))
+        .body(html::GET.replace("{{}}", &*value))
 }
 #[actix_web::main]
 async fn main() -> io::Result<()> {
@@ -131,16 +132,16 @@ async fn main() -> io::Result<()> {
     let matches = clap::App::from_yaml(yaml).get_matches();
     let http_port = matches
         .value_of("http_port")
-        .unwrap_or("7259")
+        .unwrap_or("")
         .parse::<i32>()
-        .unwrap_or(7259);
+        .unwrap_or(conf::DEFAULT_HTTP_PORT);
     let tcp_port = matches
         .value_of("tcp_port")
-        .unwrap_or("9527")
+        .unwrap_or("")
         .parse::<i32>()
-        .unwrap_or(9527);
-    let key = matches.value_of("key");
-    let cert = matches.value_of("cert");
+        .unwrap_or(DEFAULT_TCP_PORT);
+    let ssl_key = matches.value_of("key");
+    let ssl_cert = matches.value_of("cert");
 
     let map = web::Data::new(Mutex::new(HashMap::<String, structs::Value>::new()));
     let delete_queue =
@@ -162,12 +163,12 @@ async fn main() -> io::Result<()> {
             .service(web::resource("/ws/").to(ws_mod::chat_route))
             .service(get)
     });
-    if key.is_some() && cert.is_some() {
+    if ssl_key.is_some() && ssl_cert.is_some() {
         let mut builder = SslAcceptor::mozilla_intermediate(SslMethod::tls()).unwrap();
         builder
-            .set_private_key_file(key.unwrap(), SslFiletype::PEM)
+            .set_private_key_file(ssl_key.unwrap(), SslFiletype::PEM)
             .unwrap();
-        builder.set_certificate_chain_file(cert.unwrap()).unwrap();
+        builder.set_certificate_chain_file(ssl_cert.unwrap()).unwrap();
         println!("Started https server: 0.0.0.0:{}", http_port);
         server
             .bind_openssl(format!("0.0.0.0:{}", http_port), builder)?

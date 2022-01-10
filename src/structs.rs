@@ -9,9 +9,9 @@ pub(crate) struct Value {
 }
 
 impl Value {
-    pub(crate) fn new(v: impl ToString, create_time: u64) -> Self {
+    pub(crate) fn new(val: impl ToString, create_time: u64) -> Self {
         Value {
-            value: v.to_string(),
+            value: val.to_string(),
             times: 1,
             create_time,
             public: true,

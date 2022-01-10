@@ -43,8 +43,8 @@ impl actix::Message for ListRooms {
 #[derive(Message)]
 #[rtype(result = "()")]
 pub struct Join {
-    pub id: usize,
-    pub name: String,
+    pub(crate) id: usize,
+    pub(crate) name: String,
     pub(crate) times: i32,
     pub(crate) minutes: u64,
 }
@@ -75,38 +75,38 @@ impl WsServer {
 }
 
 impl WsServer {
-    fn send_join_message(&self, room: &str, ws_response: WsResponse) {
-        if let Some((_, _, sessions)) = self.rooms.get(room) {
-            let result_string = serde_json::to_string(&ws_response).unwrap();
+    fn send_join_message(&self, room: &str, websocket_response: WsResponse) {
+        if let Some((_, _, session_vec)) = self.rooms.get(room) {
+            let result_string = serde_json::to_string(&websocket_response).unwrap();
 
-            for id in sessions {
-                if let Some((addr, _)) = self.sessions.get(id) {
-                    let _ = addr.do_send(Message(result_string.clone()));
+            for id in session_vec {
+                if let Some((address, _)) = self.sessions.get(id) {
+                    let _ = address.do_send(Message(result_string.clone()));
                 }
             }
         }
     }
 
-    fn send_message(&self, room: &str, mut ws_response: WsResponse, skip_id: usize) {
+    fn send_message(&self, room: &str, mut websocket_response: WsResponse, skip_id: usize) {
         let mut locked_map = self.map.lock().unwrap();
         if let Some(v) = locked_map.get(room) {
             //key 没有被消耗光
             if let Some((addr, _)) = self.sessions.get(&skip_id) {
-                ws_response.result = Some("remaining is not zero".to_string());
-                ws_response.remaining = Some(v.times);
-                let _ = addr.do_send(Message(serde_json::to_string(&ws_response).unwrap()));
+                websocket_response.result = Some("remaining is not zero".to_string());
+                websocket_response.remaining = Some(v.times);
+                let _ = addr.do_send(Message(serde_json::to_string(&websocket_response).unwrap()));
             }
             return;
         } else {
-            ws_response.result = Some("".to_string());
+            websocket_response.result = Some("".to_string());
         }
         if let Some((mut times, minutes, sessions)) = self.rooms.get(room) {
-            let mut address = vec![];
+            let mut address_vec = vec![];
             for id in sessions {
                 if *id != skip_id {
-                    if let Some((addr, _)) = self.sessions.get(id) {
+                    if let Some((address, _)) = self.sessions.get(id) {
                         // let _ = addr.do_send(Message(message.to_owned()));
-                        address.push(addr);
+                        address_vec.push(address);
                         times -= 1;
                         if times == 0 {
                             break;
@@ -114,17 +114,17 @@ impl WsServer {
                     }
                 }
             }
-            ws_response.remaining = Some(times);
-            let result_string = serde_json::to_string(&ws_response).unwrap();
-            for i in address {
+            websocket_response.remaining = Some(times);
+            let result_string = serde_json::to_string(&websocket_response).unwrap();
+            for i in address_vec {
                 let _ = i.do_send(Message(result_string.clone()));
             }
 
             if 0 != times {
                 let create_time = tools::now_timestamps();
-                let mut v = Value::new(ws_response.message.unwrap(), create_time);
-                v.times = times;
-                locked_map.insert(String::from(room), v);
+                let mut val = Value::new(websocket_response.message.unwrap(), create_time);
+                val.times = times;
+                locked_map.insert(String::from(room), val);
                 let delete_struct = structs::StructInDeleteQueue::new(
                     create_time + 60 * minutes,
                     create_time,
@@ -133,10 +133,11 @@ impl WsServer {
                 let mut locked_queue = self.queue.lock().unwrap();
                 locked_queue.push(delete_struct);
             }
-            if let Some((addr, _)) = self.sessions.get(&skip_id) {
-                ws_response.message = None;
-                ws_response.result = Some("ok".to_string());
-                let _ = addr.do_send(Message(serde_json::to_string(&ws_response).unwrap()));
+            if let Some((address, _)) = self.sessions.get(&skip_id) {
+                websocket_response.message = None;
+                websocket_response.result = Some("ok".to_string());
+                let _ =
+                    address.do_send(Message(serde_json::to_string(&websocket_response).unwrap()));
             }
         }
     }
@@ -160,12 +161,13 @@ impl Handler<Disconnect> for WsServer {
 
     fn handle(&mut self, msg: Disconnect, _: &mut Context<Self>) {
         if let Some((_, room)) = self.sessions.remove(&msg.id) {
-            let mut vec_len = 9999;
-            if let Some(tup) = self.rooms.get_mut(&room) {
+            let vec_len = if let Some(tup) = self.rooms.get_mut(&room) {
                 let index = (*tup).2.iter().position(|x| *x == msg.id).unwrap();
                 tup.2.remove(index);
-                vec_len = tup.2.len();
-            }
+                tup.2.len()
+            } else {
+                1
+            };
             if 0 == vec_len {
                 self.rooms.remove(&room);
             } else {
@@ -315,7 +317,6 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for WsChatSession {
             }
             ws::Message::Text(text) => {
                 let m = text.trim();
-                // we check for /sss type of messages
                 if m.starts_with("/join") {
                     let v: Vec<&str> = m.splitn(3, ' ').collect();
 
@@ -328,7 +329,7 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for WsChatSession {
                                 web::Query::<structs::Params>::from_query(&v[2][1..])
                             {
                                 if let Some(t) = params.times {
-                                    times = t;
+                                    times = times.max(t);
                                 }
                                 if let Some(mut t) = params.minutes {
                                     t = t.min(60 * 24 * 7);
@@ -376,7 +377,10 @@ impl WsChatSession {
     fn hb(&self, ctx: &mut ws::WebsocketContext<Self>) {
         ctx.run_interval(HEARTBEAT_INTERVAL, |act, ctx| {
             if Instant::now().duration_since(act.hb) > CLIENT_TIMEOUT {
-                println!("Websocket Client heartbeat failed, disconnecting!");
+                println!(
+                    "Websocket Client heartbeat failed, disconnecting!id = {}.",
+                    act.id
+                );
                 let _ = act.address.do_send(Disconnect { id: act.id });
                 ctx.stop();
                 return;
