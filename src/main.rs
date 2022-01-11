@@ -168,7 +168,9 @@ async fn main() -> io::Result<()> {
         builder
             .set_private_key_file(ssl_key.unwrap(), SslFiletype::PEM)
             .unwrap();
-        builder.set_certificate_chain_file(ssl_cert.unwrap()).unwrap();
+        builder
+            .set_certificate_chain_file(ssl_cert.unwrap())
+            .unwrap();
         println!("Started https server: 0.0.0.0:{}", http_port);
         server
             .bind_openssl(format!("0.0.0.0:{}", http_port), builder)?

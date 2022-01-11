@@ -1,5 +1,5 @@
 name: server_clipboard
-version: "0.2.0"
+version: "0.4.0"
 author: zxq <phpgoc@icloud.com>
 args:
   - http_port:

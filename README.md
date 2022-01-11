@@ -8,7 +8,7 @@
 ## https证书
 
 - 测试环境自己生成
-- 没有https无法获得剪贴板权限，火狐ie剪贴板权限都不支持
+- 没有https无法获得剪贴板权限，火狐ie不支持剪贴板
 - If you want to generate your own cert/private key file, then run:
 
 

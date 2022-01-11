@@ -117,13 +117,13 @@ pub(crate) const GET: &str = r#"
         window.onload = () => {
             let conn = null
             const set_text = (wsData) => {
-                if (wsData.message) {
+                if (null != wsData.message) {
                     clipboard_text.innerHTML = wsData.message
                 }
                 if (wsData.times) {
                     times.innerHTML = wsData.times
                 }
-                if (wsData.minutes) {
+                if (null != wsData.minutes) {
                     minutes.innerHTML = wsData.minutes
                 }
                 if (wsData.total) {
@@ -132,7 +132,7 @@ pub(crate) const GET: &str = r#"
                 if (wsData.result) {
                     result.innerHTML = wsData.result
                 }
-                if (wsData.remaining !== null) {
+                if (null != wsData.remaining) {
                     remaining.innerHTML = wsData.remaining
                 }
             }
@@ -184,7 +184,7 @@ pub(crate) const GET: &str = r#"
                     console.log('Received: ' + e.data)
 
                     wsData = JSON.parse(e.data)
-                    if (clipboard_text.innerHTML === "") {
+                    if ("" === clipboard_text.innerHTML || "" === times.innerHTML ) {
                         set_text(wsData)
                     } else {
                         messageArray.push(wsData.message)
@@ -195,7 +195,7 @@ pub(crate) const GET: &str = r#"
                 conn.onclose = function () {
                     console.log('Disconnected.')
                     conn = null
-                    setTimeout(() => connect(), 5000)
+                    setTimeout(() => connect(), 8000)
                 }
             }
             connect()
